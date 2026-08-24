@@ -254,7 +254,7 @@ class AssistCallProtocol(RtpDatagramProtocol):
 
         # per-turn pipeline state
         self._conversation_id: str | None = None
-        self._tts_media_id: str | None = None
+        self._tts_token: str | None = None
         self._had_error = False
 
     # -- asyncio protocol callbacks -------------------------------------
@@ -314,8 +314,8 @@ class AssistCallProtocol(RtpDatagramProtocol):
                     continue
 
                 errors = 0
-                if self._tts_media_id:
-                    await self._play_tts(self._tts_media_id)
+                if self._tts_token:
+                    await self._play_tts(self._tts_token)
                 # brief beep to signal we're listening again
                 await self._send_pcm(_listen_tone(), silence_before=0.2)
         except asyncio.CancelledError:
@@ -348,7 +348,7 @@ class AssistCallProtocol(RtpDatagramProtocol):
 
         Returns "ok", "error", or "hangup".
         """
-        self._tts_media_id = None
+        self._tts_token = None
         self._had_error = False
 
         async def stt_stream():
@@ -410,7 +410,7 @@ class AssistCallProtocol(RtpDatagramProtocol):
         elif event.type == PipelineEventType.TTS_END:
             tts_output = data.get("tts_output")
             if tts_output:
-                self._tts_media_id = tts_output.get("media_id")
+                self._tts_token = tts_output.get("token")
         elif event.type == PipelineEventType.ERROR:
             self._had_error = True
             _LOGGER.warning(
@@ -422,14 +422,28 @@ class AssistCallProtocol(RtpDatagramProtocol):
 
     # -- audio out ------------------------------------------------------
 
-    async def _play_tts(self, media_id: str) -> None:
-        """Fetch the pipeline's TTS result and play it into the call."""
-        try:
-            _extension, data = await tts.async_get_media_source_audio(
-                self.hass, media_id
+    async def _play_tts(self, token: str) -> None:
+        """Fetch the pipeline's TTS result and play it into the call.
+
+        Fetches by stream token via ``tts.async_get_stream`` rather than
+        ``tts.async_get_media_source_audio(hass, media_id)``: the latter
+        round-trips the media_id through ``parse_media_source_id``, which
+        on this HA version fails to match its own "-stream-/" URL prefix
+        (the parsed URL path keeps its leading "/", the prefix check
+        doesn't), raising "Unresolvable: No message specified." for every
+        streamed TTS result. Fetching by token sidesteps that parsing
+        entirely.
+        """
+        stream = tts.async_get_stream(self.hass, token)
+        if stream is None:
+            _LOGGER.warning(
+                "TTS stream %s not found for extension %s", token, self._extension
             )
+            return
+        try:
+            data = b"".join([chunk async for chunk in stream.async_stream_result()])
         except Exception:
-            _LOGGER.exception("Failed to fetch TTS audio %s", media_id)
+            _LOGGER.exception("Failed to fetch TTS audio (token %s)", token)
             return
 
         try:
