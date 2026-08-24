@@ -6,13 +6,9 @@ PBX, identifies the room from the caller ID (the extension number in the
 SIP From header), streams the caller's speech into an Assist pipeline, and
 plays the pipeline's TTS response back into the call.
 
-Each extension gets its own device in the device registry, assigned to an
-area.  Home Assistant's Assist only scopes an unqualified command like
-"turn off the lights" to a caller's area when the *sentence itself*
-contains an area phrase (e.g. "... in the lounge") - passing a device_id
-alone is not enough.  So speech-to-text and intent/TTS are run as two
-separate pipeline stages here, and the caller's room name is appended to
-the transcript in between.
+Each extension gets its own device in the device registry.  Assign that
+device to an area and Assist will scope commands like "turn off the
+lights" to that area automatically.
 """
 
 from __future__ import annotations
@@ -39,12 +35,9 @@ from homeassistant.components import stt, tts
 from homeassistant.components.assist_pipeline import (
     PipelineEvent,
     PipelineEventType,
-    PipelineInput,
     PipelineNotFound,
-    PipelineRun,
-    PipelineStage,
-    async_get_pipeline,
     async_get_pipelines,
+    async_pipeline_from_audio_stream,
 )
 
 try:  # exported from the package root in recent HA versions
@@ -54,7 +47,7 @@ except ImportError:  # pragma: no cover - older HA
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import Context, HomeAssistant
-from homeassistant.helpers import chat_session, device_registry as dr
+from homeassistant.helpers import device_registry as dr
 
 from .const import (
     AUDIO_TIMEOUT,
@@ -249,7 +242,6 @@ class AssistCallProtocol(RtpDatagramProtocol):
         self.hass = hass
         self._extension = extension
         self._device_id = device_id
-        self._room = EXTENSION_AREAS.get(extension)
         self._pipeline_id = pipeline_id
         self._pipeline_timeout = pipeline_timeout
 
@@ -262,7 +254,6 @@ class AssistCallProtocol(RtpDatagramProtocol):
 
         # per-turn pipeline state
         self._conversation_id: str | None = None
-        self._last_stt_text = ""
         self._tts_media_id: str | None = None
         self._had_error = False
 
@@ -355,96 +346,48 @@ class AssistCallProtocol(RtpDatagramProtocol):
     async def _run_pipeline_once(self) -> str:
         """Run one voice command through the Assist pipeline.
 
-        Speech-to-text and intent/TTS are run as two separate pipeline
-        stages so the caller's room name can be appended to the transcript
-        before intent recognition - see the module docstring for why this
-        is needed to get room-scoped commands.
-
         Returns "ok", "error", or "hangup".
         """
         self._tts_media_id = None
         self._had_error = False
-        self._last_stt_text = ""
 
         async def stt_stream():
             while True:
                 yield await self._audio_queue.get()
 
         try:
-            pipeline = async_get_pipeline(self.hass, pipeline_id=self._pipeline_id)
+            await asyncio.wait_for(
+                async_pipeline_from_audio_stream(
+                    self.hass,
+                    context=Context(),
+                    event_callback=self._on_pipeline_event,
+                    stt_metadata=stt.SpeechMetadata(
+                        language="",  # filled in from the pipeline
+                        format=stt.AudioFormats.WAV,
+                        codec=stt.AudioCodecs.PCM,
+                        bit_rate=stt.AudioBitRates.BITRATE_16,
+                        sample_rate=stt.AudioSampleRates.SAMPLERATE_16000,
+                        channel=stt.AudioChannels.CHANNEL_MONO,
+                    ),
+                    stt_stream=stt_stream(),
+                    pipeline_id=self._pipeline_id,
+                    conversation_id=self._conversation_id,
+                    device_id=self._device_id,
+                    tts_audio_output="wav",
+                    audio_settings=AudioSettings(is_vad_enabled=True),
+                ),
+                timeout=self._pipeline_timeout,
+            )
         except PipelineNotFound:
             _LOGGER.error("Assist pipeline not found for extension %s", self._extension)
             return "hangup"
-
-        with chat_session.async_get_chat_session(
-            self.hass, self._conversation_id
-        ) as session:
-            self._conversation_id = session.conversation_id
-
-            stt_input = PipelineInput(
-                session=session,
-                device_id=self._device_id,
-                stt_metadata=stt.SpeechMetadata(
-                    language="",  # filled in from the pipeline
-                    format=stt.AudioFormats.WAV,
-                    codec=stt.AudioCodecs.PCM,
-                    bit_rate=stt.AudioBitRates.BITRATE_16,
-                    sample_rate=stt.AudioSampleRates.SAMPLERATE_16000,
-                    channel=stt.AudioChannels.CHANNEL_MONO,
-                ),
-                stt_stream=stt_stream(),
-                run=PipelineRun(
-                    self.hass,
-                    context=Context(),
-                    pipeline=pipeline,
-                    start_stage=PipelineStage.STT,
-                    end_stage=PipelineStage.STT,
-                    event_callback=self._on_pipeline_event,
-                    audio_settings=AudioSettings(is_vad_enabled=True),
-                ),
+        except (asyncio.TimeoutError, TimeoutError):
+            _LOGGER.info(
+                "No command from %s within %ss; hanging up",
+                self._extension,
+                self._pipeline_timeout,
             )
-            try:
-                await asyncio.wait_for(
-                    stt_input.execute(validate=True), timeout=self._pipeline_timeout
-                )
-            except (asyncio.TimeoutError, TimeoutError):
-                _LOGGER.info(
-                    "No command from %s within %ss; hanging up",
-                    self._extension,
-                    self._pipeline_timeout,
-                )
-                return "hangup"
-            except Exception:
-                _LOGGER.exception(
-                    "Speech-to-text failed for extension %s", self._extension
-                )
-                return "error"
-
-            intent_text = self._last_stt_text
-            if self._room:
-                intent_text = f"{intent_text} in the {self._room.lower()}"
-
-            intent_input = PipelineInput(
-                session=session,
-                device_id=self._device_id,
-                intent_input=intent_text,
-                run=PipelineRun(
-                    self.hass,
-                    context=Context(),
-                    pipeline=pipeline,
-                    start_stage=PipelineStage.INTENT,
-                    end_stage=PipelineStage.TTS,
-                    event_callback=self._on_pipeline_event,
-                    tts_audio_output="wav",
-                ),
-            )
-            try:
-                await intent_input.execute(validate=True)
-            except Exception:
-                _LOGGER.exception(
-                    "Intent/TTS processing failed for extension %s", self._extension
-                )
-                return "error"
+            return "hangup"
 
         return "error" if self._had_error else "ok"
 
@@ -452,7 +395,6 @@ class AssistCallProtocol(RtpDatagramProtocol):
         data = event.data or {}
         if event.type == PipelineEventType.STT_END:
             text = data.get("stt_output", {}).get("text", "")
-            self._last_stt_text = text
             _LOGGER.info("Extension %s said: %s", self._extension, text)
         elif event.type == PipelineEventType.INTENT_END:
             intent_output = data.get("intent_output", {})
