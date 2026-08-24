@@ -1,0 +1,29 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "FreePBX Assist",
+        "description": "Home Assistant will answer SIP calls from your FreePBX on the port below. Point a custom PJSIP endpoint at this machine (see the README).",
+        "data": {
+          "sip_port": "SIP port (UDP)",
+          "pbx_host": "FreePBX IP address (optional; only accept calls from this address)"
+        }
+      }
+    },
+    "abort": {
+      "already_configured": "FreePBX Assist is already configured"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "FreePBX Assist options",
+        "data": {
+          "allowed_extensions": "Allowed extensions (comma separated; empty = allow all)",
+          "pipeline_map": "Per-extension pipelines, one per line: extension = pipeline name",
+          "pipeline_timeout": "Seconds to wait for a spoken command before hanging up"
+        }
+      }
+    }
+  }
+}

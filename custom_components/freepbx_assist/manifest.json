@@ -1,0 +1,12 @@
+{
+  "domain": "freepbx_assist",
+  "name": "FreePBX Assist",
+  "codeowners": [],
+  "config_flow": true,
+  "dependencies": ["assist_pipeline", "intent"],
+  "documentation": "https://github.com/Dave-Ash-4297/freepbx-ha-assist",
+  "integration_type": "service",
+  "iot_class": "local_push",
+  "requirements": ["voip-utils"],
+  "version": "0.1.0"
+}
