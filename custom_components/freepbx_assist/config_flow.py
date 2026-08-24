@@ -8,6 +8,7 @@ import voluptuous as vol
 
 from homeassistant import config_entries
 from homeassistant.core import callback
+from homeassistant.helpers import selector
 
 from .const import (
     CONF_ALLOWED_EXTENSIONS,
@@ -80,7 +81,9 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                     vol.Optional(
                         CONF_PIPELINE_MAP,
                         default=options.get(CONF_PIPELINE_MAP, ""),
-                    ): str,
+                    ): selector.TextSelector(
+                        selector.TextSelectorConfig(multiline=True)
+                    ),
                     vol.Optional(
                         CONF_PIPELINE_TIMEOUT,
                         default=options.get(
