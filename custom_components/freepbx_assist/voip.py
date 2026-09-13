@@ -133,6 +133,7 @@ class FreePBXVoipProtocol(VoipDatagramProtocol):
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
         self.hass = hass
         self._entry = entry
+        self._peer_ip = ""
         super().__init__(
             sdp_info=SdpInfo(
                 username="homeassistant",
@@ -143,6 +144,12 @@ class FreePBXVoipProtocol(VoipDatagramProtocol):
             valid_protocol_factory=self._make_protocol,
         )
 
+    def datagram_received(self, data: bytes, addr) -> None:
+        # CallInfo.caller_ip is the From-header host, which Asterisk fills with
+        # its own hostname (often 127.0.1.1); the UDP source is the real PBX.
+        self._peer_ip = str(addr[0]) if addr else ""
+        super().datagram_received(data, addr)
+
     def is_valid_call(self, call_info: CallInfo) -> bool:
         """Accept only calls from the configured PBX / extensions."""
         # Options win over the setup-time value so the PBX can move without re-adding
@@ -152,10 +159,10 @@ class FreePBXVoipProtocol(VoipDatagramProtocol):
             )
             or ""
         ).strip()
-        caller_ip = str(getattr(call_info, "caller_ip", ""))
-        if pbx_host and caller_ip != pbx_host:
+        source_ip = self._peer_ip or str(getattr(call_info, "caller_ip", ""))
+        if pbx_host and source_ip != pbx_host:
             _LOGGER.warning(
-                "Rejected SIP call from %s (expected PBX at %s)", caller_ip, pbx_host
+                "Rejected SIP call from %s (expected PBX at %s)", source_ip, pbx_host
             )
             return False
 
