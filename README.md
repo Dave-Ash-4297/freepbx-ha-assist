@@ -79,6 +79,11 @@ FreePBX / Asterisk ── SIP INVITE (From: 201) ──► Home Assistant (this 
    - **Per-extension pipelines**: one per line, `2000 = Lounge Pipeline`
      (empty = your default Assist pipeline).
    - **Command timeout**: seconds of silence before the call is dropped.
+   - **RTP audio port**: leave at 0 on a flat LAN. If the PBX sits on the
+     far side of a router/NAT from Home Assistant, set a fixed port (e.g.
+     5062) and forward UDP 5062–5063 to Home Assistant alongside the SIP
+     port; Home Assistant also sends the first audio packet itself so the
+     PBX's `rtp_symmetric=yes` can lock onto the return path.
 
 ## Install — FreePBX side
 

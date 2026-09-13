@@ -56,7 +56,9 @@ from .const import (
     CONF_PBX_HOST,
     CONF_PIPELINE_MAP,
     CONF_PIPELINE_TIMEOUT,
+    CONF_RTP_PORT,
     DEFAULT_PIPELINE_TIMEOUT,
+    DEFAULT_RTP_PORT,
     DOMAIN,
     EXTENSION_AREAS,
     MAX_CALL_SECONDS,
@@ -150,6 +152,13 @@ class FreePBXVoipProtocol(VoipDatagramProtocol):
         self._peer_ip = str(addr[0]) if addr else ""
         super().datagram_received(data, addr)
 
+    def on_call(self, call_info: CallInfo) -> None:
+        # A fixed RTP port lets a single firewall/NAT forward cover the audio leg
+        rtp_port = int(self._entry.options.get(CONF_RTP_PORT, DEFAULT_RTP_PORT) or 0)
+        if rtp_port and call_info.local_rtp_port is None:
+            call_info.local_rtp_port = rtp_port
+        super().on_call(call_info)
+
     def is_valid_call(self, call_info: CallInfo) -> bool:
         """Accept only calls from the configured PBX / extensions."""
         # Options win over the setup-time value so the PBX can move without re-adding
@@ -216,6 +225,9 @@ class FreePBXVoipProtocol(VoipDatagramProtocol):
             device_id=device.id,
             pipeline_id=pipeline_id,
             pipeline_timeout=float(pipeline_timeout),
+            peer_addr=(self._peer_ip, call_info.caller_rtp_port)
+            if self._peer_ip and call_info.caller_rtp_port
+            else None,
         )
 
     def _resolve_pipeline_id(self, extension: str) -> str | None:
@@ -245,6 +257,7 @@ class AssistCallProtocol(RtpDatagramProtocol):
         device_id: str,
         pipeline_id: str | None,
         pipeline_timeout: float = DEFAULT_PIPELINE_TIMEOUT,
+        peer_addr: tuple[str, int] | None = None,
     ) -> None:
         super().__init__(
             rate=RATE,
@@ -253,6 +266,7 @@ class AssistCallProtocol(RtpDatagramProtocol):
             opus_payload_type=call_info.opus_payload_type,
         )
         self.hass = hass
+        self._peer_addr = peer_addr
         self._extension = extension
         self._device_id = device_id
         self._pipeline_id = pipeline_id
@@ -274,6 +288,11 @@ class AssistCallProtocol(RtpDatagramProtocol):
 
     def connection_made(self, transport) -> None:
         super().connection_made(transport)
+        # voip-utils only learns where to send from the first packet it receives.
+        # Start with the PBX's SDP address so our greeting goes out immediately;
+        # behind NAT that first packet is also what opens the return path.
+        if self.addr is None and self._peer_addr:
+            self.addr = self._peer_addr
         self._last_chunk_time = time.monotonic()
         self._loop_task = self.hass.async_create_background_task(
             self._call_loop(), name=f"freepbx_assist call {self._extension}"

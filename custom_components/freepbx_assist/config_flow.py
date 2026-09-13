@@ -15,8 +15,10 @@ from .const import (
     CONF_PBX_HOST,
     CONF_PIPELINE_MAP,
     CONF_PIPELINE_TIMEOUT,
+    CONF_RTP_PORT,
     CONF_SIP_PORT,
     DEFAULT_PIPELINE_TIMEOUT,
+    DEFAULT_RTP_PORT,
     DEFAULT_SIP_PORT,
     DOMAIN,
 )
@@ -97,6 +99,10 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                             CONF_PIPELINE_TIMEOUT, DEFAULT_PIPELINE_TIMEOUT
                         ),
                     ): vol.All(vol.Coerce(int), vol.Range(min=5, max=120)),
+                    vol.Optional(
+                        CONF_RTP_PORT,
+                        default=options.get(CONF_RTP_PORT, DEFAULT_RTP_PORT),
+                    ): vol.All(vol.Coerce(int), vol.Range(min=0, max=65534)),
                 }
             ),
         )

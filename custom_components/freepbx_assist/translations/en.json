@@ -22,7 +22,8 @@
           "pbx_host": "FreePBX IP address (optional; only accept calls from this address)",
           "allowed_extensions": "Allowed extensions (comma separated; empty = allow all)",
           "pipeline_map": "Per-extension pipelines, one per line: extension = pipeline name",
-          "pipeline_timeout": "Seconds to wait for a spoken command before hanging up"
+          "pipeline_timeout": "Seconds to wait for a spoken command before hanging up",
+          "rtp_port": "RTP audio port (UDP; 0 = random per call; set a fixed port if the PBX reaches Home Assistant through a router/NAT)"
         }
       }
     }

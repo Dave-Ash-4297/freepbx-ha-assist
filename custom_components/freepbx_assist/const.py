@@ -7,9 +7,12 @@ CONF_PBX_HOST = "pbx_host"
 CONF_ALLOWED_EXTENSIONS = "allowed_extensions"
 CONF_PIPELINE_MAP = "pipeline_map"
 CONF_PIPELINE_TIMEOUT = "pipeline_timeout"
+CONF_RTP_PORT = "rtp_port"
 
 DEFAULT_SIP_PORT = 5060
 DEFAULT_PIPELINE_TIMEOUT = 30
+# 0 = let the OS pick a random RTP port for each call
+DEFAULT_RTP_PORT = 0
 
 # Known extensions -> room (area). Devices for these are pre-created at setup
 # with the area already assigned; any other caller still gets a device on
