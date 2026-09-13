@@ -157,6 +157,8 @@ class FreePBXVoipProtocol(VoipDatagramProtocol):
         rtp_port = int(self._entry.options.get(CONF_RTP_PORT, DEFAULT_RTP_PORT) or 0)
         if rtp_port and call_info.local_rtp_port is None:
             call_info.local_rtp_port = rtp_port
+            # voip-utils binds to local_rtp_ip or "" — and "" fails getaddrinfo
+            call_info.local_rtp_ip = "0.0.0.0"
         super().on_call(call_info)
 
     def is_valid_call(self, call_info: CallInfo) -> bool:
