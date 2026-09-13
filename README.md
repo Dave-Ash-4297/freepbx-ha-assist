@@ -69,8 +69,11 @@ FreePBX / Asterisk ── SIP INVITE (From: 201) ──► Home Assistant (this 
    - **SIP port**: 5060, unless the core VoIP integration is also running (it
      owns 5060) — then pick e.g. 5061 and use that port in the PBX config too.
    - **FreePBX IP address**: strongly recommended — only calls from this IP
-     are answered.
+     are answered. If the PBX is behind a router/NAT relative to Home
+     Assistant, this is the address its packets *arrive from*.
 3. Optional, in the integration's **Configure** dialog:
+   - **FreePBX IP address**: change it here if the PBX moves — no need to
+     remove and re-add the integration.
    - **Allowed extensions**: pre-filled with `1000, 2000, 3000, 4000` (the
      four room phones); clear it to allow any caller.
    - **Per-extension pipelines**: one per line, `2000 = Lounge Pipeline`

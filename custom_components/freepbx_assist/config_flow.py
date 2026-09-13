@@ -61,7 +61,7 @@ class FreePBXAssistConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
 
 class OptionsFlowHandler(config_entries.OptionsFlow):
-    """Options: extension allow-list, per-extension pipelines, timeout."""
+    """Options: PBX address filter, extension allow-list, pipelines, timeout."""
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
@@ -74,6 +74,13 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             step_id="init",
             data_schema=vol.Schema(
                 {
+                    vol.Optional(
+                        CONF_PBX_HOST,
+                        default=options.get(
+                            CONF_PBX_HOST,
+                            self.config_entry.data.get(CONF_PBX_HOST, ""),
+                        ),
+                    ): str,
                     vol.Optional(
                         CONF_ALLOWED_EXTENSIONS,
                         default=options.get(CONF_ALLOWED_EXTENSIONS, ""),

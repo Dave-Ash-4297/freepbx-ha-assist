@@ -19,6 +19,7 @@
       "init": {
         "title": "FreePBX Assist options",
         "data": {
+          "pbx_host": "FreePBX IP address (optional; only accept calls from this address)",
           "allowed_extensions": "Allowed extensions (comma separated; empty = allow all)",
           "pipeline_map": "Per-extension pipelines, one per line: extension = pipeline name",
           "pipeline_timeout": "Seconds to wait for a spoken command before hanging up"

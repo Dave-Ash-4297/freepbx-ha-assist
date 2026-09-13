@@ -145,7 +145,13 @@ class FreePBXVoipProtocol(VoipDatagramProtocol):
 
     def is_valid_call(self, call_info: CallInfo) -> bool:
         """Accept only calls from the configured PBX / extensions."""
-        pbx_host = (self._entry.data.get(CONF_PBX_HOST) or "").strip()
+        # Options win over the setup-time value so the PBX can move without re-adding
+        pbx_host = (
+            self._entry.options.get(
+                CONF_PBX_HOST, self._entry.data.get(CONF_PBX_HOST)
+            )
+            or ""
+        ).strip()
         caller_ip = str(getattr(call_info, "caller_ip", ""))
         if pbx_host and caller_ip != pbx_host:
             _LOGGER.warning(
