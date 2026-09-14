@@ -57,8 +57,12 @@ FreePBX / Asterisk ── SIP INVITE (From: 201) ──► Home Assistant (this 
 - FreePBX/Asterisk with the **OPUS codec** available (`codec_opus` ships with
   the FreePBX distro; check with `asterisk -rx "core show codecs" | grep -i opus`).
 - Network path from the PBX to Home Assistant on the SIP port (UDP 5060 by
-  default) and ephemeral UDP RTP ports. On plain Home Assistant OS on a LAN
-  there is nothing to open.
+  default) and the RTP port (random by default). On a flat LAN there is
+  nothing to open. If the PBX is on a different subnet behind a router/NAT
+  (e.g. PBX on the ISP router's LAN, Home Assistant behind a second
+  router), point the PBX at the router's address, set a fixed **RTP audio
+  port** in the integration options and forward UDP SIP + RTP/RTCP ports to
+  Home Assistant — see [`freepbx/pjsip_custom.conf`](freepbx/pjsip_custom.conf).
 
 ## Install — Home Assistant side
 
@@ -136,7 +140,17 @@ logger:
   The endpoint must have `allow=opus` and the codec module must be loaded;
   the phones themselves may use any codec — Asterisk transcodes.
 - **Rejected call from …** in the HA log: the caller IP or extension didn't
-  match your PBX IP / allowed-extensions settings.
+  match your PBX IP / allowed-extensions settings. The IP compared is the
+  address the SIP packet actually came from; if the PBX reaches HA through a
+  NAT, that may be the router, not the PBX — adjust the PBX IP option.
+- **Call is answered but silent, both ways** (HA log: `No RTP audio from …`
+  and `Failed to send audio … Destination address not set`): audio isn't
+  crossing a NAT between the PBX and HA. Set a fixed **RTP audio port** in
+  the integration options, forward UDP that port and the next one up to HA,
+  and keep `rtp_symmetric=yes` on the PBX endpoint. An asyncio
+  `Task exception was never retrieved … socket.gaierror: Name does not
+  resolve` right after a call means an integration version older than 0.1.4
+  with a fixed RTP port — update.
 - **Commands work but aren't room-scoped**: the extension's device has no
   area assigned, or the target entities aren't exposed to Assist / not in
   that area.
